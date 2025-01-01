@@ -9,18 +9,22 @@ import time
 import os
 os.system('color'); green = '\033[32m'; red = '\033[31m'; yellow = '\033[33m'; reset = '\033[0m'
 tokens_in_wallet = []
+trash_tokens_in_wallet = []
 
 async def fetch_symbol(token_address):
     async with aiohttp.ClientSession() as session:
         async with session.get(f"https://api.dexscreener.com/latest/dex/tokens/{token_address}") as response:
-            if response.status == 200:
-                data = await response.json() 
-                symbol = data['pairs'][0]['baseToken']['symbol']
-                price = float(data['pairs'][0]['priceUsd']) 
-                return symbol, price
-            else:
-                print(f"Failed to fetch data for {token_address}, status code: {response.status}")
-                return None
+            try:
+                if response.status == 200:
+                    data = await response.json() 
+                    symbol = data['pairs'][0]['baseToken']['symbol']
+                    price = float(data['pairs'][0]['priceUsd']) 
+                    return symbol, price
+                else:
+                    print(f"Failed to fetch data for {token_address}, status code: {response.status}")
+                    return None
+            except Exception:
+                return "not_found",0
 
 async def get_tokens_in_wallet(wallet_address: str):
         SOLANA_ENDPOINT = 'https://api.mainnet-beta.solana.com'
@@ -36,15 +40,19 @@ async def get_tokens_in_wallet(wallet_address: str):
                 amount = token['account']['data']['parsed']['info']['tokenAmount']['uiAmount']
                 decimals = token['account']['data']['parsed']['info']['tokenAmount']['decimals']
                 symbol, price = await fetch_symbol(mint)
-                print(f"[ {symbol:<10} ] [ ${(amount*price):1.2f} ] [ {mint:<45} ]")
-                tokens_in_wallet.append(symbol)
+                value = float(amount*price)
+                if value > 0.01:
+                    print(f"[ {symbol:<10} ] [ {mint:<45} ] ${value:1.2f}")
+                    tokens_in_wallet.append(symbol)
+                else: trash_tokens_in_wallet.append(symbol)
+                
         return tokens_in_wallet
 
 async def main():
-    print(f'\n{green}Working...{reset}\n')
+    print(f'\nWorking...\n')
     await get_tokens_in_wallet(WALLET_ADDRESS)
-    print(f"\nTotal tokens in {WALLET_ADDRESS}: {len(tokens_in_wallet)}")
-    print(f'\n{green}Completed{reset}\n')
+    print(f"\n{green}Total {len(tokens_in_wallet) + len(trash_tokens_in_wallet)} tokens found in {WALLET_ADDRESS}\n\tof which {len(trash_tokens_in_wallet)} are below $0.01{reset}\n")
+    print('Done')
     time.sleep(999)
 
 # Run the async function:
